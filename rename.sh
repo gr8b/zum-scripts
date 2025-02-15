@@ -26,7 +26,7 @@ id=$(jq -r '.id' $manifest)
 name=$(jq -r '.name' $manifest)
 type=$(jq -r '.type' $manifest)
 namespace=$(jq -r '.namespace' $manifest)
-js_class=$(jq -r '.widget.js_class' $manifest)
+js_class=$(jq -r 'if .widget | has("js_class") then .widget.js_class else empty end' "$manifest")
 
 echo "id        $id"
 echo "name      $name"
