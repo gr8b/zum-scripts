@@ -16,7 +16,7 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
     esac
-    shift  # Move to the next argument
+    shift
 done
 
 manifest="$widget_dir/manifest.json"
@@ -53,6 +53,11 @@ json=$(jq \
 
 # Modify manifest.json actions
 if [[ "$type" == "widget" ]]; then
+    php_namespace=$(grep -E '^namespace ' "$widget_dir/Widget.php" | sed -E 's/^namespace (.*);/\1/')
+    php_namespace_escaped=$(printf '%s\n' "$php_namespace" | sed 's/[\/&]/\\&/g')
+    new_php_namespace="Modules\\$new_namespace"
+    new_php_namespace_escaped=$(printf '%s\n' "$new_php_namespace" | sed 's/[\/&]/\\&/g')
+
     # Widget actions
     json=$(jq --arg id "$id" --arg new_id "$new_id" \
     '
@@ -74,6 +79,8 @@ if [[ "$type" == "widget" ]]; then
 
     # Update default widget name
     sed -i "s|['\"]$name['\"]|'$new_name'|g" $widget_dir/Widget.php
+    sed -i "s|namespace $php_namespace_escaped;|namespace $new_php_namespace_escaped;|g" $widget_dir/Widget.php
+
 else
     # Module actions
     echo "Not yet implemented!"
@@ -84,16 +91,21 @@ fi
 # Save modified manifest.json
 echo "$json" | jq '.' | sed 's/  /\t/g' > $manifest
 
-# Update namespace in .php files
-if [[ -d "$widget_dir/actions" ]]; then
-    find "$widget_dir/actions" -type f -name "*.php" -exec sed -i "s|namespace .*\\$namespace\\\\Actions;|namespace Modules\\\\$new_namespace\\\\Actions;|g" {} +
-fi
+# Update namespace and use declarations in directories actions/ and includes.
+dirs=("actions" "includes")
 
-if [[ -d "$widget_dir/includes" ]]; then
-    sed -i "s|namespace .*\\$namespace\\\\Includes;|namespace Modules\\\\$new_namespace\\\\Includes;|g" "$widget_dir/includes/WidgetForm.php"
-fi
+for dir in "${dirs[@]}"; do
+    if [[ -d "$widget_dir/$dir" ]]; then
+        dir_capitalized="$(tr '[:lower:]' '[:upper:]' <<< "${dir:0:1}")${dir:1}"
 
-sed -i "s|namespace .*\\$namespace;|namespace Modules\\\\$new_namespace;|g" $widget_dir/Widget.php
+        find "$widget_dir/$dir" -type f -name "*.php" -exec sed -i "s|namespace $php_namespace_escaped\\\\$dir_capitalized;|namespace $new_php_namespace_escaped\\\\$dir_capitalized;|g" {} +
+        find "$widget_dir/$dir" -type f -name "*.php" -exec sed -i "s|use $php_namespace_escaped\\\\$dir_capitalized|use $new_php_namespace_escaped\\\\$dir_capitalized|g" {} +
+    fi
+done
+
+if [[ -d "$widget_dir/views" ]]; then
+    find "$widget_dir/views" -type f -name "*.php" -exec sed -i "s|use $php_namespace_escaped\\\\|use $new_php_namespace_escaped\\\\|g" {} +
+fi
 
 
 
